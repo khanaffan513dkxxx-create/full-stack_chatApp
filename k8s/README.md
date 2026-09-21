@@ -1,267 +1,205 @@
-# 🚀 Full-Stack Chat App Deployment Guide: Kubernetes (Kind) & Docker Compose
+# 🚀 Full-Stack Chat Application — Kubernetes Deployment
 
-Welcome to the official guide for deploying a **Full-Stack Chat Application** on your local machine. Whether you're a student, a professional, or someone exploring the world of Kubernetes and Docker, this guide is designed to help you deploy the app with ease.
+A full-stack real-time chat application deployed locally using **Docker, Kubernetes, and Kind/Minikube**.
 
-In this tutorial, you will learn how to:
-1. Set up a local Kubernetes environment using **Kind**.
-2. Deploy a **Full-Stack Chat Application** (Frontend, Backend, MongoDB) on **Kubernetes**.
-3. Explore an alternative deployment using **Docker Compose**.
+> **Project note:** The original application code was forked from the upstream repository. I independently created, customized, and tested the Kubernetes deployment manifests and deployment workflow for this project.
 
----
+## 👨‍💻 My Contribution
 
-## 📋 Prerequisites
+- Created Kubernetes manifests inside the `k8s/` directory.
+- Configured separate Deployments for the frontend, backend, and MongoDB.
+- Created Kubernetes Services for internal application communication.
+- Created a dedicated `chat-app` namespace for resource isolation.
+- Configured MongoDB persistent storage using PV/PVC resources.
+- Added backend configuration through Kubernetes environment variables and Secrets.
+- Configured Nginx to serve the frontend and route API/Socket.IO traffic to the backend.
+- Built and deployed the frontend and backend Docker images.
+- Used Kubernetes commands for rollout, troubleshooting, logging, and port-forwarding.
+- Debugged issues involving MongoDB authentication, service discovery, backend connectivity, and frontend access.
 
-Before we start the deployment, ensure that you have the following tools installed and set up on your machine:
+## 🏗️ Architecture
 
-### **1. Kind (Kubernetes in Docker)**  
-Kind is a tool that lets you run Kubernetes clusters in Docker containers. It’s lightweight, easy to use, and perfect for local development.
-
-**For Windows** (PowerShell):
-```bash
-curl.exe -Lo kind-windows-amd64.exe https://kind.sigs.k8s.io/dl/v0.25.0/kind-windows-amd64
-Move-Item .\kind-windows-amd64.exe c:\some-dir-in-your-PATH\kind.exe
+```text
+Browser
+   |
+   v
+Frontend Service (Nginx :80)
+   |
+   +---- /api/ and /socket.io/ ----> Backend Service (:5001)
+                                      |
+                                      v
+                               MongoDB Service (:27017)
+                                      |
+                                      v
+                               Persistent Volume
 ```
 
-**For Windows** (WSL - Windows Subsystem for Linux):
-```bash
-# For AMD64 / x86_64
-[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-amd64
+## 🛠️ Technologies Used
 
-# For ARM64
-[ $(uname -m) = aarch64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-arm64
-chmod +x ./kind
-sudo mv ./kind /usr/local/bin/kind
+- **Frontend:** React / Nginx
+- **Backend:** Node.js / Express
+- **Database:** MongoDB
+- **Containerization:** Docker
+- **Orchestration:** Kubernetes
+- **Local Cluster:** Kind or Minikube
+- **Configuration:** Kubernetes YAML, ConfigMap, Secret
+- **Storage:** PersistentVolume and PersistentVolumeClaim
+
+## 📁 Kubernetes Manifests
+
+| File | Purpose |
+|---|---|
+| `namespace.yaml` | Creates the `chat-app` namespace |
+| `backend-deployment.yaml` | Deploys the backend application |
+| `backend-service.yaml` | Exposes the backend inside the cluster |
+| `backend-secrets.yaml` | Stores sensitive backend configuration |
+| `frontend-deployment.yaml` | Deploys the frontend/Nginx container |
+| `frontend-service.yaml` | Exposes the frontend application |
+| `frontend-configmap.yaml` | Provides Nginx reverse-proxy configuration |
+| `mongodb-deployment.yaml` | Deploys MongoDB |
+| `mongodb-service.yaml` | Exposes MongoDB inside the cluster |
+| `mongo-pvc.yaml` | Provides persistent storage for MongoDB |
+| `kind-config.yaml` | Local Kind cluster configuration |
+
+## 🚀 Deployment Steps
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/khanaffan513dkxxx-create/full-stack_chatApp.git
+cd full-stack_chatApp
 ```
 
-**For Linux**:
-```bash
-# For AMD64 / x86_64
-[ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-amd64
+### 2. Create or start the local Kubernetes cluster
 
-# For ARM64
-[ $(uname -m) = aarch64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-arm64
-chmod +x ./kind
-sudo mv ./kind /usr/local/bin/kind
-```
-
----
-
-### **2. Kubectl (Kubernetes Command Line Tool)**  
-Kubectl is the tool we’ll use to manage Kubernetes clusters. You’ll use it to interact with your local Kubernetes cluster and deploy resources.
-
-**For x86_64 Architecture:**
-```bash
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-```
-
-**For ARM64 Architecture:**
-```bash
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl"
-```
-
-**Validate the downloaded binary:**
-```bash
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256"
-echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
-```
-
-**Install kubectl:**
-```bash
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-# OR if there’s an issue with your root permissions:
-chmod +x kubectl
-mkdir -p ~/.local/bin
-mv ./kubectl ~/.local/bin/kubectl
-```
-
-**Verify kubectl installation:**
-```bash
-kubectl version --client --output=yaml
-```
-
----
-
-### **3. Docker**  
-Docker is required for building and running containers locally. Follow the instructions on the [official Docker website](https://www.docker.com/get-started) to download and install Docker on your system.
-
-Once installed, you can verify Docker by running:
+For Kind:
 
 ```bash
-docker --version
-```
-
----
-
-## 🛠️ Cloning the Project
-
-With the prerequisites set up, let’s grab the code for the chat application. Run the following commands:
-
-```bash
-git clone https://github.com/iemafzalhassan/full-stack_chatApp.git
-```
-```bash
-cd full-stack_chatApp/k8s
-```
-
-```bash
-git checkout DevOps
-```
-
-This will:
-- **Clone** the project repository from GitHub.
-- Navigate into the `k8s` folder, which contains the Kubernetes configuration files for the deployment.
-
----
-
-## 🚢 Deployment Using Kubernetes (Kind)
-
-Now that we have everything in place, let’s start deploying the chat application to Kubernetes. Below are the detailed steps to deploy each component of the application using **Kind**.
-
-### 1. Create Kind Cluster:
-
-```bash
-# Create cluster using config
-
 kind create cluster --config k8s/kind-config.yaml
-
-# Verify cluster is running
 kubectl cluster-info
 ```
 
-### 2. Create Namespace and Base Resources
-
-A **namespace** is a way to organize your resources. It keeps the app's resources isolated and easy to manage. To create the namespace for our chat app, run:
-
+For Minikube, start Minikube using your preferred driver and verify the cluster:
 
 ```bash
-# Create namespace
-kubectl apply -f k8s/namespace.yaml
-
-# Verify namespace creation
-kubectl get namespaces
+minikube status
+kubectl cluster-info
 ```
 
-### 3. Create Storage and Configurations
-
-MongoDB is used for storing chat messages and user data. To deploy MongoDB, apply the following commands:
+### 3. Create the namespace
 
 ```bash
-# Create MongoDB PVC
+kubectl apply -f k8s/namespace.yaml
+```
+
+### 4. Deploy storage, configuration, and Secrets
+
+```bash
 kubectl apply -f k8s/mongo-pvc.yaml -n chat-app
-
-# Create backend secrets
 kubectl apply -f k8s/backend-secrets.yaml -n chat-app
-
-# Create frontend nginx config
 kubectl apply -f k8s/frontend-configmap.yaml -n chat-app
 ```
 
-### 4. Deploy MongoDB
+### 5. Deploy MongoDB
+
 ```bash
-# Deploy MongoDB
 kubectl apply -f k8s/mongodb-deployment.yaml -n chat-app
 kubectl apply -f k8s/mongodb-service.yaml -n chat-app
-
-# Wait for MongoDB pod to be ready
-kubectl wait --for=condition=Ready pods -l app=mongodb -n chat-app --timeout=120s
+kubectl wait --for=condition=Ready pod -l app=mongodb -n chat-app --timeout=120s
 ```
 
-
-### 5. 🖥️ Deploy Backend Service
-
-The **backend** service processes messages and user authentication. To deploy the backend, run the following commands:
+### 6. Deploy the backend
 
 ```bash
-# Deploy Backend
 kubectl apply -f k8s/backend-deployment.yaml -n chat-app
 kubectl apply -f k8s/backend-service.yaml -n chat-app
-
-# Wait for Backend pod to be ready
-kubectl wait --for=condition=Ready pods -l app=backend -n chat-app --timeout=120s
+kubectl rollout status deployment/backend -n chat-app
 ```
 
-These files will deploy the backend service, which will handle all API requests from the frontend.
-
-### 6. 🌐 Deploy Frontend Service
-
-The **frontend** is the user interface where people interact with the chat app. To deploy the frontend, use these commands:
+### 7. Deploy the frontend
 
 ```bash
-# Deploy Frontend
 kubectl apply -f k8s/frontend-deployment.yaml -n chat-app
 kubectl apply -f k8s/frontend-service.yaml -n chat-app
-
-# Wait for Frontend pod to be ready
-kubectl wait --for=condition=Ready pods -l app=frontend -n chat-app --timeout=120s
+kubectl rollout status deployment/frontend -n chat-app
 ```
 
-This will launch the frontend UI and expose it to the web.
+## 🔍 Verification and Troubleshooting
 
----
-
-## 🧐 Verification and Management
-
-Once the app is deployed, it's crucial to verify that everything is running smoothly.
+Check all resources:
 
 ```bash
-# Check all resources
 kubectl get all -n chat-app
-
-# Check pod logs if needed
-kubectl logs -f -l app=frontend -n chat-app
-kubectl logs -f -l app=backend -n chat-app
-kubectl logs -f -l app=mongodb -n chat-app
 ```
-## Accessing the Application
 
-The application is exposed through NodePort services:
-http://localhost:8080
+Check services:
 
-You can verify the service URLs using:
 ```bash
-# Get service details
 kubectl get svc -n chat-app
 ```
 
-### 🔍 Describe a Pod
+View application logs:
 
-If a pod isn’t working as expected, you can describe it to get more information:
+```bash
+kubectl logs -l app=backend -n chat-app
+kubectl logs -l app=frontend -n chat-app
+kubectl logs -l app=mongodb -n chat-app
+```
+
+Describe a resource when troubleshooting:
 
 ```bash
 kubectl describe pod <pod-name> -n chat-app
 ```
 
-This will give you detailed information about a specific pod, including any potential issues.
-
-## Cleanup
-
-When you're done, you can clean up using:
-```bash
-# Delete all resources in namespace
-kubectl delete namespace chat-app
-
-# Delete the kind cluster
-kind delete cluster --name chat-app-cluster
-```
-
----
-
-## 🐳 Docker Compose (Alternative Local Deployment)
-
-If you prefer a simpler local setup using **Docker Compose**, you can deploy the chat app without Kubernetes. Here’s how to do it:
+Check backend service endpoints:
 
 ```bash
-docker-compose up -d --build
+kubectl get endpoints backend -n chat-app
 ```
 
-This command:
-- Starts all services defined in the `docker-compose.yml` file.
-- Runs the services in detached mode (`-d`).
-- Rebuilds the Docker images (`--build`) in case of any changes.
+## 🌐 Access the Application
 
-Once the services are running, you can access the app at [http://localhost:8080](http://localhost:8080).
+Use port-forwarding when running the application locally:
 
+```bash
+kubectl port-forward svc/frontend -n chat-app 8080:80 --address=0.0.0.0
+```
 
-## 🎉 Conclusion
+Then open:
 
-Congratulations! You’ve successfully deployed the **Full-Stack Chat Application** using **Kubernetes (via Kind)** or **Docker Compose**. Whether you're using Kubernetes for a more robust, scalable solution or Docker Compose for a simpler local setup, your chat app is now running!
+```text
+http://localhost:8080
+```
+
+Keep the port-forward command running while using the application. Press `Ctrl+C` to stop it.
+
+## 🐳 Docker Compose Alternative
+
+The application can also be run using Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+Stop the Compose services:
+
+```bash
+docker compose down
+```
+
+## 📌 Learning Outcomes
+
+This project helped me practice:
+
+- Containerizing full-stack applications with Docker.
+- Deploying multi-tier applications on Kubernetes.
+- Kubernetes Deployments, Services, Namespaces, Secrets, ConfigMaps, and storage.
+- Internal service-to-service communication using Kubernetes DNS.
+- Nginx reverse proxy configuration.
+- MongoDB persistence and authentication configuration.
+- Debugging CrashLoopBackOff, service connectivity, and port-forwarding issues.
+
+## 📄 Project Attribution
+
+The application source is based on a fork of the upstream full-stack chat application repository. The Kubernetes manifests, deployment configuration, testing, and troubleshooting work documented here were completed and customized as part of my DevOps learning project.
